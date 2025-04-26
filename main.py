@@ -67,11 +67,7 @@ async def main():
         logger.error(f"Fatal error: {str(e)}")
     finally:
         # Cleanup working directory
-        for root, dirs, files in os.walk(working_dir, topdown=False):
-            for name in files:
-                os.remove(os.path.join(root, name))
-            for name in dirs:
-                os.rmdir(os.path.join(root, name))
+    
         logger.info("Cleanup completed")
 
 if __name__ == "__main__":
