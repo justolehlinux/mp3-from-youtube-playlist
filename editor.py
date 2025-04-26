@@ -60,7 +60,7 @@ class Editor:
                         description=description
                     )
                 # Escape special characters in text
-                main_text_escaped = main_text.replace("'", r"\'")
+                main_text_escaped = main_text.replace("'", r"\'")[:50]
                 part_info_escaped = part_info.replace("'", r"\'")
                 print(part_info_escaped + ": STARTED")
 
