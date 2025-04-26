@@ -34,10 +34,9 @@ async def main():
     )
 
     try:
-        channel_url = "https://www.youtube.com/@marktilbury/videos"
         # Step 1: Get channel videos
         videos = await downloader.get_channel_videos(
-            channel_url,
+            config['channel_url'],
             limit=config.get('video_limit', 5)
         )
         
