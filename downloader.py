@@ -38,7 +38,7 @@ class Downloader:
         try:
             ydl_opts = {
                 'format': self.video_format,
-                'outtmpl': os.path.join(self.output_dir, '%(title)s', '%(title)s.%(ext)s'),
+                'outtmpl': os.path.join(self.output_dir, '%(id)s', '%(title)s.%(ext)s'),
                 'quiet': False,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
