@@ -1,76 +1,78 @@
-import argparse
+# main.py
+import asyncio
+import logging
+import json
 import os
-import re
-import moviepy.editor as MP
+from downloader import Downloader
+from editor import Editor
 
-from pytube import Playlist
-from pytube import YouTube
-from termcolor import colored, cprint
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
-ARG_PLAYLIST_ID_SHORT = "-ID"
-ARG_PLAYLIST_ID_LONG = "--playlist_id"
-ARG_PLAYLIST_ID_HELP = "provide your playlist id"
-ARG_VIDEO_URL_SHORT = "-URL"
-ARG_VIDEO_URL_LONG = "--video_url"
-ARG_VIDEO_URL_HELP = "provide your video url"
-MODULE_INFO = "this script downloads youtube playlists/videos and converts these to mp3 files"
-YT_PLAYLIST_URL_FRAGMENT = "https://www.youtube.com/playlist?list="
-DOWNLOAD_PATH = "download"
-VIDEO_FILE_EXT = "mp4"
-AUDIO_FILE_EXT = "mp3"
+async def main():
+    # Load configuration
+    with open('config.json', 'r') as config_file:
+        config = json.load(config_file)
+    
+    # Setup working directory
+    working_dir = "/tmp/yt"
+    os.makedirs(working_dir, exist_ok=True)
+    logger.info(f"Using working directory: {working_dir}")
 
+    # Initialize components
+    downloader = Downloader(output_dir=working_dir)
+    editor = Editor(
+        cookies_file=config['cookies_file'],
+        segment_length=config.get('segment_length', 180),
+        output_dir=working_dir,
+        max_concurrent_tasks=config.get('max_concurrent_tasks', 3)
+    )
 
-def main():
-    args = parse_args()
-    if args.playlist_id is not None:
-        playlist = gen_playlist_from_arg(args=args)
-        download_videos_from_playlist(playlist=playlist)
-    elif args.video_url is not None:
-        download_video_from_url(video=args.video_url)
-    else:
-        cprint('You must either provide a playlist id or a video url!', 'white', 'on_red', attrs=['bold'])
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description=MODULE_INFO)
-
-    parser.add_argument(ARG_PLAYLIST_ID_SHORT, ARG_PLAYLIST_ID_LONG, required=False,
-                        help=ARG_PLAYLIST_ID_HELP)
-
-    parser.add_argument(ARG_VIDEO_URL_SHORT, ARG_VIDEO_URL_LONG, required=False,
-                        help=ARG_VIDEO_URL_HELP)
-
-    return parser.parse_args()
-
-
-def gen_playlist_from_arg(args):
-    playlist_id = args.playlist_id
-    playlist = Playlist(YT_PLAYLIST_URL_FRAGMENT + playlist_id)
-
-    return playlist
-
-
-def download_videos_from_playlist(playlist):
-    # prints each video url, which is the same as iterating through playlist.video_urls
-    for url in playlist:
-        print(url)
-        YouTube(url).streams.filter(file_extension=VIDEO_FILE_EXT).first().download(DOWNLOAD_PATH)
-        convert_video_to_audio()
-
-def download_video_from_url(video):
-    print(video)
-    YouTube(video).streams.filter(file_extension=VIDEO_FILE_EXT).first().download(DOWNLOAD_PATH)
-    convert_video_to_audio()
-
-def convert_video_to_audio():
-    for file in os.listdir(DOWNLOAD_PATH):
-        if re.search(VIDEO_FILE_EXT, file):
-            video_path = os.path.join(DOWNLOAD_PATH, file)
-            audio_path = os.path.join(DOWNLOAD_PATH, os.path.splitext(file)[0] + "." + AUDIO_FILE_EXT)
-            new_file = MP.AudioFileClip(video_path)
-            new_file.write_audiofile(audio_path)
-            os.remove(video_path)
-
+    try:
+        # Step 1: Get channel videos
+        videos = await downloader.get_channel_videos(
+            config['channel_url'],
+            limit=config.get('video_limit', 5)
+        )
+        
+        # Step 2: Process and upload videos
+        upload_tasks = []
+        for video in videos:
+            try:
+                # Download video
+                downloaded_video = await downloader.download_video(video)
+                if not downloaded_video:
+                    continue
+                
+                # Process and upload segments
+                segment_tasks = await editor.crop_video_to_clips(downloaded_video)
+                await asyncio.gather(*segment_tasks)
+                
+                # Cleanup original video
+                
+            except Exception as e:
+                logger.error(f"Error processing video {video['id']}: {str(e)}")
+                continue
+        
+        # Wait for all uploads to complete
+        if upload_tasks:
+            await asyncio.gather(*upload_tasks)
+            
+    except Exception as e:
+        logger.error(f"Fatal error: {str(e)}")
+    finally:
+        # Cleanup working directory
+        for root, dirs, files in os.walk(working_dir, topdown=False):
+            for name in files:
+                os.remove(os.path.join(root, name))
+            for name in dirs:
+                os.rmdir(os.path.join(root, name))
+        logger.info("Cleanup completed")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
