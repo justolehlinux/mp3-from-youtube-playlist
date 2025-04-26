@@ -1,0 +1,7 @@
+    {
+        "channel_url": "https://www.youtube.com/@NetworkChuck/videos",
+        "cookies_file": "tiktok_cookies.json",
+        "segment_length": 180,
+        "video_limit": 5,
+        "max_concurrent_tasks": 3
+    }
